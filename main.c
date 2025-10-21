@@ -1,25 +1,96 @@
-#include <stdio.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <pthread.h>
 #include "request.h"
 #include "response.h"
-
+#include "test_thread.h"
 
 
 #define PORT 8080
 #define ADDRESS "0.0.0.0"
-#define MINSPARETHREADS 25
-#define MAXTHREADS 200
 
-void* handle_connection(struc request* req, struct resp* 
+static const size_t num_threads = 4;
+static const size_t num_items = 100;
+
+struct req_resp_handler {
+    request* req;
+    response* resp;
+}; 
+typedef struct req_resp_handler req_resp_handler;
+
+void handle_request(void *arg){
+    int client_fd = *(int*)arg;
+    req_resp_handler *r = malloc(sizeof(req_resp_handler));
+
+    //Declaring request and response variables
+    r->req = malloc(sizeof(struct request));
+    //r->resp = malloc(sizeof(struct response));  
+
+    //Read the request, we use 8kb buffer (should be enough)
+    char req_buf[8192];
+    char resp_buf[8192];
+    if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
+        perror("read");
+    }
+    else
+    {
+        //Create a request object
+        parse_request(r->req,req_buf);
+        //print_request(req);
+        char* requested_path = parse_path(r->req->path);
+        printf("%s\n", requested_path);
+
+        //Open file and return a file pointer
+        FILE* body_fd = fopen(requested_path, "rb");
+        //404
+        if(body_fd == NULL){
+            r->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+        }
+        else{
+            //Search for the end of the file, the file pointer will point 
+			//to the end of the file
+            fseek(body_fd, 0, SEEK_END);
+            //With this we will take the poisition number 
+			//of the end of the file, thus giving us the length
+            long fsize = ftell(body_fd);
+            //Return to the begin of the file
+            fseek(body_fd, 0, SEEK_SET);
+            //Allocate a string with the size of the file
+            char* body = malloc(fsize + 1);
+            fread(body, fsize, 1, body_fd);
+
+            r->resp = create_response("HTTP/1.1", 200, "OK", body);
+            fclose(body_fd);
+        }
+        printf("%p", pthread_self());
+        int resp_len = serialize_resp(r->resp, resp_buf, sizeof(resp_buf));
+        send(client_fd, resp_buf, strlen(resp_buf),0);
+        free(requested_path);
+        if(strstr(r->req->headers, "Connection: keep-alive") != NULL)
+        {
+
+        }
+        else
+        {
+            close(client_fd);
+        }
+        free(r);
+        
+    }
+}
+
 
 void main(int argc, char  const* argv[]){
+
+    //
+    //test_thread();
+    //return;    
+
+    //Multi-thread configuration, defininf thread pool
+    tpool_t *tm;
+    tm = tpool_create(num_threads);
+
     //Defining the file descriptor returned by socket()
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -55,15 +126,7 @@ void main(int argc, char  const* argv[]){
     int client_fd;
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(struct sockaddr_in);
-
-	//Declaring request and response variables
-    struct request* req = malloc(sizeof(struct request));
-    struct response* resp = malloc(sizeof(struct response));  
-
-	pthread_t threads[MAXTHREADS];
-	//Create a thread_data_t argument array
-	thread_data_t thr_data[MAXTHREADS];
-
+	
 	while(1) { 
 		//Accept a connection, this puts the client address in the structure 
 		client_fd = accept(server_fd, 
@@ -72,60 +135,59 @@ void main(int argc, char  const* argv[]){
 
 		if(client_fd > 0) {
             printf("Connection accepted\n");
-			pthread_create(handle_connection(client_fd)
+			//pthread_create(handle_connection(client_fd));
         }
         else {
             perror("accept");
             exit(EXIT_FAILURE);
         }
-        //Read the request, we use 8kb buffer (should be enough)
-        char req_buf[8192];
-        char resp_buf[8192];
-        if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
-            perror("read");
-        }
-        else
-        {
-            //Create a request object
-            parse_request(req,req_buf);
-            //print_request(req);
-            char* requested_path = parse_path(req->path);
-            printf("%s\n", requested_path);
 
-            //Open file and return a file pointer
-            FILE* body_fd = fopen(requested_path, "rb");
-            //404
-            if(body_fd == NULL){
-                resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
-            }
-            else{
-                //Search for the end of the file, the file pointer will point 
-				//to the end of the file
-                fseek(body_fd, 0, SEEK_END);
-                //With this we will take the poisition number 
-				//of the end of the file, thus giving us the length
-                long fsize = ftell(body_fd);
-                //Return to the begin of the file
-                fseek(body_fd, 0, SEEK_SET);
-                //Allocate a string with the size of the file
-                char* body = malloc(fsize + 1);
-                fread(body, fsize, 1, body_fd);
+        req_resp_handler *r = malloc(sizeof(req_resp_handler));
+        tpool_add_work(tm, handle_request, &client_fd);
+        // //Read the request, we use 8kb buffer (should be enough)
+        // char req_buf[8192];
+        // char resp_buf[8192];
+        // if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
+        //     perror("read");
+        // }
+        // else
+        // {
+        //     //Create a request object
+        //     parse_request(req,req_buf);
+        //     //print_request(req);
+        //     char* requested_path = parse_path(req->path);
+        //     printf("%s\n", requested_path);
 
-                resp = create_response("HTTP/1.1", 200, "OK", body);
-                fclose(body_fd);
-            }
-            int resp_len = serialize_resp(resp, resp_buf, sizeof(resp_buf));
-            send(client_fd, resp_buf, strlen(resp_buf), 0);
-            free(requested_path);
-            close(client_fd);
-        }
+        //     //Open file and return a file pointer
+        //     FILE* body_fd = fopen(requested_path, "rb");
+        //     //404
+        //     if(body_fd == NULL){
+        //         resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+        //     }
+        //     else{
+        //         //Search for the end of the file, the file pointer will point 
+		// 		//to the end of the file
+        //         fseek(body_fd, 0, SEEK_END);
+        //         //With this we will take the poisition number 
+		// 		//of the end of the file, thus giving us the length
+        //         long fsize = ftell(body_fd);
+        //         //Return to the begin of the file
+        //         fseek(body_fd, 0, SEEK_SET);
+        //         //Allocate a string with the size of the file
+        //         char* body = malloc(fsize + 1);
+        //         fread(body, fsize, 1, body_fd);
+
+        //         resp = create_response("HTTP/1.1", 200, "OK", body);
+        //         fclose(body_fd);
+        //     }
+        //     int resp_len = serialize_resp(resp, resp_buf, sizeof(resp_buf));
+        //     send(client_fd, resp_buf, strlen(resp_buf), 0);
+        //     free(requested_path);
+        //     close(client_fd);
     }
-    
-
     //Always close the doors
-    free(req);
-    free(resp);
+    tpool_wait(tm);
+    tpool_destroy(tm);
     close(server_fd);
-        
-        
+    return;
 }

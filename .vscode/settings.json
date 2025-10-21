@@ -3,6 +3,10 @@
         "socket.h": "c",
         "request.h": "c",
         "stdio.h": "c",
-        "inet.h": "c"
+        "inet.h": "c",
+        "response.h": "c",
+        "in.h": "c",
+        "tpool.h": "c",
+        "stdlib.h": "c"
     }
 }

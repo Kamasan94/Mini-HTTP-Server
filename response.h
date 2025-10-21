@@ -7,6 +7,7 @@ struct response {
     char headers[16000];
     char body[1000000]; //TODO TEMPORARY
 };
+typedef struct response response;
 
 //Response builder, it takse, protocol, status code, status response e the bodys
 struct response* create_response(char* protocol, u_int16_t status_code, char* status_response, char* body){

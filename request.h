@@ -8,6 +8,7 @@ struct request {
     char protocol[10];
     char headers[16000];
 };
+typedef struct request request;
 
 //Check if the last row is \r\n\r\n in header parsing
 int check_last_row(char* p){
