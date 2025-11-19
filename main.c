@@ -67,14 +67,48 @@ void handle_request(void *arg){
         int resp_len = serialize_resp(r->resp, resp_buf, sizeof(resp_buf));
         send(client_fd, resp_buf, strlen(resp_buf),0);
         free(requested_path);
-        if(strstr(r->req->headers, "Connection: keep-alive") != NULL)
+        //TODO TEST KEEP ALIVE
+        while(strstr(r->req->headers, "Connection: keep-alive") != NULL)
         {
+            if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
+                perror("read");
+            }
+            else
+            {
+                //Create a request object
+                parse_request(r->req,req_buf);
+                //print_request(req);
+                char* requested_path = parse_path(r->req->path);
+                printf("%s\n", requested_path);
 
-        }
-        else
-        {
-            close(client_fd);
-        }
+                //Open file and return a file pointer
+                FILE* body_fd = fopen(requested_path, "rb");
+                //404
+                if(body_fd == NULL){
+                    r->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+                }
+                else{
+                    //Search for the end of the file, the file pointer will point 
+			        //to the end of the file
+                    fseek(body_fd, 0, SEEK_END);
+                    //With this we will take the poisition number 
+			        //of the end of the file, thus giving us the length
+                    long fsize = ftell(body_fd);
+                    //Return to the begin of the file
+                    fseek(body_fd, 0, SEEK_SET);
+                    //Allocate a string with the size of the file
+                    char* body = malloc(fsize + 1);
+                    fread(body, fsize, 1, body_fd);
+
+                    r->resp = create_response("HTTP/1.1", 200, "OK", body);
+                    fclose(body_fd);
+                }
+                printf("%p", pthread_self());
+                int resp_len = serialize_resp(r->resp, resp_buf, sizeof(resp_buf));
+                send(client_fd, resp_buf, strlen(resp_buf),0);
+                free(requested_path);
+                }
+        close(client_fd);
         free(r);
         
     }
@@ -144,46 +178,6 @@ void main(int argc, char  const* argv[]){
 
         req_resp_handler *r = malloc(sizeof(req_resp_handler));
         tpool_add_work(tm, handle_request, &client_fd);
-        // //Read the request, we use 8kb buffer (should be enough)
-        // char req_buf[8192];
-        // char resp_buf[8192];
-        // if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
-        //     perror("read");
-        // }
-        // else
-        // {
-        //     //Create a request object
-        //     parse_request(req,req_buf);
-        //     //print_request(req);
-        //     char* requested_path = parse_path(req->path);
-        //     printf("%s\n", requested_path);
-
-        //     //Open file and return a file pointer
-        //     FILE* body_fd = fopen(requested_path, "rb");
-        //     //404
-        //     if(body_fd == NULL){
-        //         resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
-        //     }
-        //     else{
-        //         //Search for the end of the file, the file pointer will point 
-		// 		//to the end of the file
-        //         fseek(body_fd, 0, SEEK_END);
-        //         //With this we will take the poisition number 
-		// 		//of the end of the file, thus giving us the length
-        //         long fsize = ftell(body_fd);
-        //         //Return to the begin of the file
-        //         fseek(body_fd, 0, SEEK_SET);
-        //         //Allocate a string with the size of the file
-        //         char* body = malloc(fsize + 1);
-        //         fread(body, fsize, 1, body_fd);
-
-        //         resp = create_response("HTTP/1.1", 200, "OK", body);
-        //         fclose(body_fd);
-        //     }
-        //     int resp_len = serialize_resp(resp, resp_buf, sizeof(resp_buf));
-        //     send(client_fd, resp_buf, strlen(resp_buf), 0);
-        //     free(requested_path);
-        //     close(client_fd);
     }
     //Always close the doors
     tpool_wait(tm);
