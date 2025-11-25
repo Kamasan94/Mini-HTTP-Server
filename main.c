@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 #include "request.h"
 #include "response.h"
-#include "test_thread.h"
+#include "./tests/test-thread.h"
 
 
 #define PORT 8080
@@ -21,10 +21,10 @@ typedef struct req_resp_handler req_resp_handler;
 
 void handle_request(void *arg){
     int client_fd = *(int*)arg;
-    req_resp_handler *r = malloc(sizeof(req_resp_handler));
+    req_resp_handler *handler = malloc(sizeof(req_resp_handler));
 
     //Declaring request and response variables
-    r->req = malloc(sizeof(struct request));
+    handler->req = malloc(sizeof(struct request));
     //r->resp = malloc(sizeof(struct response));  
 
     //Read the request, we use 8kb buffer (should be enough)
@@ -36,16 +36,16 @@ void handle_request(void *arg){
     else
     {
         //Create a request object
-        parse_request(r->req,req_buf);
+        parse_request(handler->req,req_buf);
         //print_request(req);
-        char* requested_path = parse_path(r->req->path);
+        char* requested_path = parse_path(handler->req->path);
         printf("%s\n", requested_path);
 
         //Open file and return a file pointer
         FILE* body_fd = fopen(requested_path, "rb");
         //404
         if(body_fd == NULL){
-            r->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+            handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
         }
         else{
             //Search for the end of the file, the file pointer will point 
@@ -60,56 +60,72 @@ void handle_request(void *arg){
             char* body = malloc(fsize + 1);
             fread(body, fsize, 1, body_fd);
 
-            r->resp = create_response("HTTP/1.1", 200, "OK", body);
+            handler->resp = create_response("HTTP/1.1", 200, "OK", body);
             fclose(body_fd);
         }
-        printf("%p", pthread_self());
-        int resp_len = serialize_resp(r->resp, resp_buf, sizeof(resp_buf));
+        printf("Thread number : %p", pthread_self());
+        int resp_len = serialize_resp(handler->resp, resp_buf, sizeof(resp_buf));
         send(client_fd, resp_buf, strlen(resp_buf),0);
         free(requested_path);
         //TODO TEST KEEP ALIVE
-        while(strstr(r->req->headers, "Connection: keep-alive") != NULL)
+        if(strstr(handler->req->headers, "Connection: keep-alive") != NULL)
         {
-            if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
-                perror("read");
-            }
-            else
+            while(strstr(handler->req->headers, "Connection: close") == NULL)
             {
-                //Create a request object
-                parse_request(r->req,req_buf);
-                //print_request(req);
-                char* requested_path = parse_path(r->req->path);
-                printf("%s\n", requested_path);
+                //Clear the buffer
+                memset(req_buf, 0, sizeof(req_buf));
 
-                //Open file and return a file pointer
-                FILE* body_fd = fopen(requested_path, "rb");
-                //404
-                if(body_fd == NULL){
-                    r->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+                if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
+                    perror("read");
                 }
-                else{
-                    //Search for the end of the file, the file pointer will point 
-			        //to the end of the file
-                    fseek(body_fd, 0, SEEK_END);
-                    //With this we will take the poisition number 
-			        //of the end of the file, thus giving us the length
-                    long fsize = ftell(body_fd);
-                    //Return to the begin of the file
-                    fseek(body_fd, 0, SEEK_SET);
-                    //Allocate a string with the size of the file
-                    char* body = malloc(fsize + 1);
-                    fread(body, fsize, 1, body_fd);
+                else
+                {
+                    //TODO CHECK IF THE BUFFER IS EMPTY
+                    if(req_buf[0] != 0)
+                    {
+                        //Create a request object
+                        parse_request(handler->req,req_buf);
+                        //print_request(req);
+                        char* requested_path = parse_path(handler->req->path);
+                        printf("%s\n", requested_path);
 
-                    r->resp = create_response("HTTP/1.1", 200, "OK", body);
-                    fclose(body_fd);
+                        //Open file and return a file pointer
+                        FILE* body_fd = fopen(requested_path, "rb");
+                        //404
+                        if(body_fd == NULL){
+                            handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+                        }
+                        else{
+                            //Search for the end of the file, the file pointer will point 
+                            //to the end of the file
+                            fseek(body_fd, 0, SEEK_END);
+                            //With this we will take the poisition number 
+                            //of the end of the file, thus giving us the length
+                            long fsize = ftell(body_fd);
+                            //Return to the begin of the file
+                            fseek(body_fd, 0, SEEK_SET);
+                            //Allocate a string with the size of the file
+                            char* body = malloc(fsize + 1);
+                            fread(body, fsize, 1, body_fd);
+
+                            handler->resp = create_response("HTTP/1.1", 200, "OK", body);
+                            fclose(body_fd);
+                        }
+                        printf("Thread number: %p\n", pthread_self());
+                        int resp_len = serialize_resp(handler->resp, resp_buf, sizeof(resp_buf));
+                        send(client_fd, resp_buf, strlen(resp_buf),0);
+                        free(requested_path);
+                    }
+                    
                 }
-                printf("%p", pthread_self());
-                int resp_len = serialize_resp(r->resp, resp_buf, sizeof(resp_buf));
-                send(client_fd, resp_buf, strlen(resp_buf),0);
-                free(requested_path);
-                }
-        close(client_fd);
-        free(r);
+
+            }
+            
+        }
+        else{
+            close(client_fd);
+            free(handler);
+        }
         
     }
 }

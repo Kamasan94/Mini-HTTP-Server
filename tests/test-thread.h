@@ -3,7 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
-#include "tpool.h"
+#include "../tpool.h"
 #include <unistd.h>
 
 static const size_t num_test_threads = 4;

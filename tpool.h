@@ -10,6 +10,7 @@ struct tpool;
 //Thread pool structure type
 typedef struct tpool tpool_t;
 
+//The function of the worker
 typedef void (*thread_func_t)(void* arg);
 
 tpool_t *tpool_create(size_t num);
