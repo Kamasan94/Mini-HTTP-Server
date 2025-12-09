@@ -25,6 +25,7 @@ int serialize_resp(struct response* resp, char* buf, int buf_size){
         "%s %d %s\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
         "Content-Length: %zu\r\n"
+        "Connection: Keep-Alive\r\n"
         "\r\n"
         "%s\n"
         "\r\n\r\n",
