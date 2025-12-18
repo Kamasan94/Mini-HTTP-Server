@@ -25,123 +25,67 @@ void handle_request(void *arg){
     // Set initial time for timeout
     time_t start = time(NULL);
 
-
     int client_fd = *(int*)arg;
+
+    // Request-Response init
     req_resp_handler *handler = malloc(sizeof(req_resp_handler));
 
-    //Declaring request and response variables
+    // Declaring request and response variables
     handler->req = malloc(sizeof(struct request));
     //r->resp = malloc(sizeof(struct response));  
 
-    //Read the request, we use 8kb buffer (should be enough)
+    // Read the request, we use 8kb buffer (should be enough)
     char req_buf[8192];
     char resp_buf[8192];
-    if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
-        perror("read");
-    }
-    else
+
+    // Main loop for handling requests
+    for(;;)
     {
-        //Create a request object
-        parse_request(handler->req,req_buf);
-        //print_request(req);
-        char* requested_path = parse_path(handler->req->path);
-        printf("%s\n", requested_path);
-
-        //Open file and return a file pointer
-        FILE* body_fd = fopen(requested_path, "rb");
-        //404
-        if(body_fd == NULL){
-            handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+        if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
+            perror("read");
         }
-        else{
-            //Search for the end of the file, the file pointer will point 
-			//to the end of the file
-            fseek(body_fd, 0, SEEK_END);
-            //With this we will take the poisition number 
-			//of the end of the file, thus giving us the length
-            long fsize = ftell(body_fd);
-            //Return to the begin of the file
-            fseek(body_fd, 0, SEEK_SET);
-            //Allocate a string with the size of the file
-            char* body = malloc(fsize + 1);
-            fread(body, fsize, 1, body_fd);
+        else
+        {
+            // Create a request object
+            parse_request(handler->req,req_buf);
+            // print_request(req);
+            char* requested_path = parse_path(handler->req->path);
+            printf("%s\n", requested_path);
 
-            handler->resp = create_response("HTTP/1.1", 200, "OK", body);
-            fclose(body_fd);
-        }
+            // Open file and return a file pointer
+            FILE* body_fd = fopen(requested_path, "rb");
+            // 404
+            if(body_fd == NULL){
+                handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+            }
+            else{
+                // Search for the end of the file, the file pointer will point 
+			    // to the end of the file
+                fseek(body_fd, 0, SEEK_END);
+                // With this we will take the position number 
+			    // of the end of the file, thus giving us the length
+                long fsize = ftell(body_fd);
+                // Return to the begin of the file
+                fseek(body_fd, 0, SEEK_SET);
+                // Allocate a string with the size of the file
+                char* body = malloc(fsize + 1);
+                fread(body, fsize, 1, body_fd);
+
+                handler->resp = create_response("HTTP/1.1", 200, "OK", body);
+                fclose(body_fd);
+            }
         printf("Thread number : %p\n", pthread_self());
         int resp_len = serialize_resp(handler->resp, resp_buf, sizeof(resp_buf));
         send(client_fd, resp_buf, strlen(resp_buf),0);
         free(requested_path);
         //TODO TEST KEEP ALIVE
-        if(strstr(handler->req->headers, "Connection: keep-alive") != NULL)
-        {
-            printf("Inside keep alive\n");
-            //while(strstr(handler->req->headers, "Connection: close") == NULL)
-            for(;;)
-            {
-                //Clear the buffer
-                memset(req_buf, 0, sizeof(req_buf));
-                printf("%d\n", start + TIMEOUT);
-                if(time(NULL) > start + TIMEOUT)
-                {
-                    printf("TIMED OUT\n");
-                    break;
-                }
-                else 
-                {
-                    if(read(client_fd,req_buf,sizeof(req_buf)) < 0){
-                        perror("read");
-                    }
-                    else
-                    {
-                        //TODO CHECK IF THE BUFFER IS EMPTY
-                        if(req_buf[0] != 0)
-                        {
-                            //Create a request object
-                            parse_request(handler->req,req_buf);
-                            //print_request(req);
-                            char* requested_path = parse_path(handler->req->path);
-                            printf("%s\n", requested_path);
-
-                            //Open file and return a file pointer
-                            FILE* body_fd = fopen(requested_path, "rb");
-                            //404
-                            if(body_fd == NULL){
-                                handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
-                            }
-                            else{
-                                //Search for the end of the file, the file pointer will point 
-                                //to the end of the file
-                                fseek(body_fd, 0, SEEK_END);
-                                //With this we will take the poisition number 
-                                //of the end of the file, thus giving us the length
-                                long fsize = ftell(body_fd);
-                                //Return to the begin of the file
-                                fseek(body_fd, 0, SEEK_SET);
-                                //Allocate a string with the size of the file
-                                char* body = malloc(fsize + 1);
-                                fread(body, fsize, 1, body_fd);
-
-                                handler->resp = create_response("HTTP/1.1", 200, "OK", body);
-                                fclose(body_fd);
-                            }
-                            int resp_len = serialize_resp(handler->resp, resp_buf, sizeof(resp_buf));
-                            
-                            /* Send the response to the client*/
-                            send(client_fd, resp_buf, strlen(resp_buf),0);
-                            free(requested_path);
-                        }
-                        
-                    }
-                }
-            }
-            
+        if(strstr(handler->req->headers, "Connection: keep-alive") == NULL)
+            break;
         }
-        close(client_fd);
-        free(handler);
-        
+         
     }
+    close(client_fd);
+    free(handler);
 }
 
 /******************** MAIN ******************** */
@@ -168,7 +112,6 @@ void main(int argc, char  const* argv[]){
     sock_addr.sin_port = htons(PORT);
     sock_addr.sin_addr = address;
     
-    //Bind the socket address to the socket file descriptor
     int opt = 1;
 	//Set the sochet option to reuse the port if already in use
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
@@ -176,11 +119,13 @@ void main(int argc, char  const* argv[]){
         exit(EXIT_FAILURE);
     }
 
+    // Setting the timeout for the keep alive
     struct timeval tv;
     tv.tv_sec = TIMEOUT;
     tv.tv_usec = 0;
     setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 
+    // Binding
     if(bind(server_fd, (struct sockaddr*)&sock_addr, sizeof(sock_addr)) < 0){
         perror("bind");
         exit(EXIT_FAILURE);
