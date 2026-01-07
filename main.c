@@ -7,6 +7,7 @@
 #include "response.h"
 #include "./tests/test-thread.h"
 #include "./tests/test-keep-alive.h"
+#include "utils.h"
 
 #define PORT 8080
 #define ADDRESS "0.0.0.0"
@@ -56,7 +57,7 @@ void handle_request(void *arg){
             FILE* body_fd = fopen(requested_path, "rb");
             // 404
             if(body_fd == NULL){
-                handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found");
+                handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found","text/html");
             }
             else{
                 // Search for the end of the file, the file pointer will point 
@@ -70,11 +71,15 @@ void handle_request(void *arg){
                 // Allocate a string with the size of the file
                 char* body = malloc(fsize + 1);
                 fread(body, fsize, 1, body_fd);
-
-                handler->resp = create_response("HTTP/1.1", 200, "OK", body);
+                
+                handler->resp = create_response("HTTP/1.1", 200, "OK", body, get_filename_ext(requested_path));
                 fclose(body_fd);
             }
+        //Debug prints
         printf("Thread number : %p\n", pthread_self());
+        printf("Response:\n");
+        printf("%s %d %s %s\n", handler->resp->protocol, handler->resp->status_code, handler->resp->status_response, handler->resp->content_type);
+
         int resp_len = serialize_resp(handler->resp, resp_buf, sizeof(resp_buf));
         send(client_fd, resp_buf, strlen(resp_buf),0);
         free(requested_path);
