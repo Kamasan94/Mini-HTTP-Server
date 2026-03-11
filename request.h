@@ -1,4 +1,9 @@
-#define ROOTDIR "./src"
+#define ROOTDIR "/home/kamasan/projects/cminihttpserver/src\0"
+#include<string.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<linux/limits.h>
+#include<stdint.h>
 
 //STRUCTURES
 //This defines the struct for the first line of the request
@@ -27,6 +32,7 @@ void parse_header(struct request* req, char* buf){
     strncpy(req->headers, buf, count);
 }
 
+
 //Print the request
 void print_request(struct request* req){
     printf("%s %s %s\n%s\n", req->method, req->path, req->protocol, req->headers);
@@ -40,10 +46,15 @@ char* parse_path(char* path){
         return p;
     }
     else {
-        char*p = malloc(sizeof(path) + sizeof(ROOTDIR));
-        strcpy(p, ROOTDIR);
-        strcat(p, path);
-        return p;
+        char *resolvedPath = malloc(PATH_MAX); 
+        char *final_path =  malloc(PATH_MAX);//malloc(sizeof(path) + sizeof(ROOTDIR));
+        strcat(strcpy(final_path, ROOTDIR), path);
+        realpath(final_path, resolvedPath);
+        if(strstr(resolvedPath, ROOTDIR) == NULL){
+            strcpy(final_path, "403");
+        }
+        free(resolvedPath);
+        return final_path;
     }
 }
 

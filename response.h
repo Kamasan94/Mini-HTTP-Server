@@ -39,7 +39,7 @@ char *get_content_type(const char *file_extension) {
     }
 }
 
-//Response builder, it takse, protocol, status code, status response e the bodys
+//Response builder, it takes: protocol, status code, status response e the bodys
 struct response* create_response(const char* protocol, const u_int16_t status_code, const char* status_response, const char* body, const char* file_extension){
     struct response* resp = malloc(sizeof(struct response));
     strcpy(resp->protocol,protocol);

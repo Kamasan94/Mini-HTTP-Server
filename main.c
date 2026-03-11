@@ -9,7 +9,7 @@
 #include "./tests/test-keep-alive.h"
 #include "utils.h"
 
-#define PORT 8080
+#define PORT 8081
 #define ADDRESS "0.0.0.0"
 #define TIMEOUT 10 //seconds
 
@@ -52,31 +52,51 @@ void handle_request(void *arg){
             // print_request(req);
             char* requested_path = parse_path(handler->req->path);
             printf("%s\n", requested_path);
-
-            // Open file and return a file pointer
-            FILE* body_fd = fopen(requested_path, "rb");
-            // 404
-            if(body_fd == NULL){
-                handler->resp = create_response("HTTP/1.1", 404, "Not found", "Not found","text/html");
+            if(requested_path == "403") {
+                handler->resp = create_response("HTTP/1.1", 
+                    403, 
+                    "Forbidden", 
+                    "Forbidden",
+                    "text/html"
+                );
             }
-            else{
-                // Search for the end of the file, the file pointer will point 
-			    // to the end of the file
-                fseek(body_fd, 0, SEEK_END);
-                // With this we will take the position number 
-			    // of the end of the file, thus giving us the length
-                long fsize = ftell(body_fd);
-                // Return to the begin of the file
-                fseek(body_fd, 0, SEEK_SET);
-                // Allocate a string with the size of the file
-                char* body = malloc(fsize + 1);
-                fread(body, fsize, 1, body_fd);
-                
-                handler->resp = create_response("HTTP/1.1", 200, "OK", body, get_filename_ext(requested_path));
-                fclose(body_fd);
+            else {
+                // Open file and return a file pointer
+                FILE* body_fd = fopen(requested_path, "rb");
+                // 404
+                if(body_fd == NULL){
+                    handler->resp = create_response("HTTP/1.1", 
+                        404, 
+                        "Not found", 
+                        "Not found",
+                        "text/html"
+                    );
+                }
+                else{
+                    // Search for the end of the file, the file pointer will point 
+                    // to the end of the file
+                    fseek(body_fd, 0, SEEK_END);
+                    // With this we will take the position number 
+                    // of the end of the file, thus giving us the length
+                    long fsize = ftell(body_fd);
+                    // Return to the begin of the file
+                    fseek(body_fd, 0, SEEK_SET);
+                    // Allocate a string with the size of the file
+                    char* body = malloc(fsize + 1);
+                    fread(body, fsize, 1, body_fd);
+                    
+                    handler->resp = create_response("HTTP/1.1", 
+                        200, 
+                        "OK", 
+                        body, 
+                        get_filename_ext(requested_path)
+                    );
+                    fclose(body_fd);
+                }
             }
+            
         //Debug prints
-        printf("Thread number : %p\n", pthread_self());
+        printf("Thread number : %lu\n", pthread_self());
         printf("Response:\n");
         printf("%s %d %s %s\n", handler->resp->protocol, handler->resp->status_code, handler->resp->status_response, handler->resp->content_type);
 
@@ -125,10 +145,10 @@ void main(int argc, char  const* argv[]){
     }
 
     // Setting the timeout for the keep alive
-    struct timeval tv;
-    tv.tv_sec = TIMEOUT;
-    tv.tv_usec = 0;
-    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+    //struct timeval tv;
+    //tv.tv_sec = TIMEOUT;
+    //tv.tv_usec = 0;
+    //setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 
     // Binding
     if(bind(server_fd, (struct sockaddr*)&sock_addr, sizeof(sock_addr)) < 0){

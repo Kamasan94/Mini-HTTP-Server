@@ -71,6 +71,6 @@ void test_keep_alive() {
 
    read(fd, response, sizeof(response));
 
-   printf("%d\n", response);
+   printf("%s\n", response);
 
 }
